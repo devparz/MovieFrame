@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Late Fees: tile reveal prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bungee&family=Karla:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --card-yellow: #F2CB3C;
+    --shop-blue: #1C2C6B;
+    --ticket-red: #D23A2C;
+    --tape-black: #1B1B20;
+    --label-cream: #F8F1DD;
+    --ok-green: #1F7A4D;
+
+    --bg: var(--card-yellow);
+    --ink: var(--shop-blue);
+    --panel: var(--label-cream);
+    --panel-ink: var(--shop-blue);
+    --rule: var(--shop-blue);
+    --muted: #4A5486;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #131D4A;
+      --ink: var(--card-yellow);
+      --panel: #1F2C66;
+      --panel-ink: var(--label-cream);
+      --rule: var(--card-yellow);
+      --muted: #AEB6DC;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #131D4A;
+    --ink: var(--card-yellow);
+    --panel: #1F2C66;
+    --panel-ink: var(--label-cream);
+    --rule: var(--card-yellow);
+    --muted: #AEB6DC;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: Karla, "Trebuchet MS", system-ui, sans-serif;
+    font-size: 1rem;
+    line-height: 1.45;
+  }
+  .shop {
+    max-width: 30rem;
+    margin: 0 auto;
+    padding: 1.25rem 1rem 3rem;
+  }
+
+  /* Header: a membership-card strip */
+  .sign {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 1rem;
+    border-bottom: 4px solid var(--rule);
+    padding-bottom: .6rem;
+  }
+  .sign h1 {
+    font-family: Bungee, Impact, "Arial Black", sans-serif;
+    font-weight: 400;
+    font-size: clamp(2rem, 9vw, 2.9rem);
+    line-height: .95;
+    margin: 0;
+    letter-spacing: .01em;
+  }
+  .sign p { margin: .3rem 0 0; font-size: .9rem; color: var(--muted); }
+  .tally { text-align: right; white-space: nowrap; }
+  .tally .num {
+    font-family: Bungee, Impact, "Arial Black", sans-serif;
+    font-size: 1.9rem;
+    line-height: 1;
+    display: block;
+  }
+  .tally .cap { font-size: .8rem; color: var(--muted); }
+
+  .meter {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin: .8rem 0 .7rem;
+    font-weight: 600;
+    font-size: .95rem;
+  }
+  .pips { display: flex; gap: 4px; }
+  .pips i {
+    width: 12px; height: 12px; border-radius: 50%;
+    background: var(--ink);
+    display: block;
+  }
+  .pips i.spent { background: transparent; box-shadow: inset 0 0 0 2px var(--ink); opacity: .45; }
+
+  /* Board */
+  .board {
+    position: relative;
+    aspect-ratio: 1;
+    width: 100%;
+    border: 4px solid var(--tape-black);
+    background: var(--tape-black);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .board svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  .tiles {
+    position: absolute; inset: 0;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    grid-template-rows: repeat(4, 1fr);
+    gap: 3px;
+    perspective: 900px;
+  }
+  .tile {
+    appearance: none;
+    border: 0;
+    margin: 0;
+    padding: 9% 8%;
+    background: var(--tape-black);
+    cursor: pointer;
+    display: flex;
+    align-items: stretch;
+    font: inherit;
+    transition: transform .45s ease, opacity .45s ease;
+    transform-origin: center;
+    backface-visibility: hidden;
+    outline: 1px solid #000;
+  }
+  .tile .label {
+    flex: 1;
+    background: var(--label-cream);
+    color: var(--tape-black);
+    border-radius: 3px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    overflow: hidden;
+    font-size: clamp(.62rem, 2.6vw, .8rem);
+    font-weight: 800;
+    text-align: left;
+  }
+  .tile .label span { padding: 10% 10% 0; }
+  .tile .label b {
+    display: block;
+    height: 34%;
+    background:
+      linear-gradient(to bottom, var(--band) 0 40%, transparent 40% 55%, var(--band) 55% 100%);
+  }
+  .tile.easy   { --band: var(--card-yellow); }
+  .tile.medium { --band: var(--ticket-red); }
+  .tile.hard   { --band: var(--shop-blue); }
+
+  .tile:hover:not(:disabled) .label,
+  .tile.active .label { box-shadow: 0 0 0 3px var(--card-yellow); }
+  .tile:focus-visible { outline: 3px solid var(--ticket-red); outline-offset: -3px; z-index: 2; }
+  .tile:disabled { cursor: default; }
+  .tile.open {
+    transform: rotateY(90deg);
+    opacity: 0;
+    pointer-events: none;
+  }
+  .tile.static .label {
+    animation: static .6s steps(6);
+  }
+  @keyframes static {
+    0%, 100% { filter: none; transform: none; }
+    20% { filter: invert(1) contrast(2); transform: translateX(-3px) skewX(-6deg); }
+    40% { filter: grayscale(1) contrast(3); transform: translateX(4px); }
+    60% { filter: invert(1); transform: translateX(-2px) skewX(4deg); }
+    80% { filter: grayscale(1); transform: translateX(2px); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .tile { transition: opacity .2s linear; }
+    .tile.open { transform: none; }
+    .tile.static .label { animation: none; }
+  }
+
+  /* Counter: question / guess panel */
+  .counter {
+    margin-top: 1rem;
+    background: var(--panel);
+    color: var(--panel-ink);
+    border: 3px solid var(--rule);
+    border-radius: 6px;
+    padding: 1rem;
+  }
+  .counter h2 {
+    font-size: 1.15rem;
+    line-height: 1.3;
+    margin: 0 0 .75rem;
+    font-weight: 800;
+  }
+  .counter p { margin: 0 0 .75rem; }
+  .tier { font-size: .85rem; font-weight: 600; color: var(--muted); margin-bottom: .3rem; }
+
+  .options { display: grid; gap: .5rem; }
+  .btn, .opt {
+    font: inherit;
+    font-weight: 600;
+    border-radius: 5px;
+    padding: .7rem .9rem;
+    cursor: pointer;
+    min-height: 44px;
+  }
+  .opt {
+    text-align: left;
+    background: transparent;
+    color: inherit;
+    border: 2px solid currentColor;
+  }
+  .opt:hover:not(:disabled) { background: var(--card-yellow); color: var(--shop-blue); }
+  .opt:disabled { cursor: default; opacity: .55; }
+  .opt.right { background: var(--ok-green); border-color: var(--ok-green); color: #fff; opacity: 1; }
+  .opt.wrong { background: var(--ticket-red); border-color: var(--ticket-red); color: #fff; opacity: 1; }
+  .btn {
+    background: var(--ticket-red);
+    color: #fff;
+    border: 0;
+  }
+  .btn.quiet { background: transparent; color: inherit; border: 2px solid currentColor; }
+  .btn:focus-visible, .opt:focus-visible, input:focus-visible {
+    outline: 3px solid var(--ticket-red); outline-offset: 2px;
+  }
+  .row { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: .85rem; }
+
+  .guess {
+    margin-top: 1rem;
+    display: flex;
+    gap: .5rem;
+  }
+  .guess input {
+    flex: 1;
+    min-width: 0;
+    font: inherit;
+    padding: .7rem .8rem;
+    border-radius: 5px;
+    border: 3px solid var(--rule);
+    background: var(--label-cream);
+    color: var(--tape-black);
+  }
+  .guess-note { font-size: .85rem; color: var(--muted); margin: .4rem 0 0; }
+  .verdict { font-weight: 800; }
+  .verdict.good { color: var(--ok-green); }
+  .verdict.bad { color: var(--ticket-red); }
+  :root[data-theme="dark"] .verdict.good { color: #6FD9A3; }
+  :root[data-theme="dark"] .verdict.bad { color: #FF8A7E; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .verdict.good { color: #6FD9A3; }
+    :root:not([data-theme="light"]) .verdict.bad { color: #FF8A7E; }
+  }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main class="shop">
+
+  <header class="sign">
+    <div>
+      <h1>Late Fees</h1>
+      <p>A film title is hiding behind 16 tapes. Say what you see.</p>
+    </div>
+    <div class="tally" aria-live="polite">
+      <span class="num" id="score">0</span>
+      <span class="cap">points, board <span id="boardNo">1</span> of <span id="boardTotal">3</span></span>
+    </div>
+  </header>
+
+  <div class="meter">
+    <span id="turnsText">10 turns left</span>
+    <span class="pips" id="pips" aria-hidden="true"></span>
+  </div>
+
+  <div class="board">
+    <div id="picture"></div>
+    <div class="tiles" id="tiles"></div>
+  </div>
+
+  <form class="guess" id="guessForm" autocomplete="off">
+    <input id="guessInput" type="text" aria-label="Name the film" placeholder="Name the film">
+    <button class="btn" type="submit">Guess</button>
+  </form>
+  <p class="guess-note" id="guessNote"></p>
+
+  <section class="counter" id="counter" aria-live="polite"></section>
+
+</main>
+
+<script>
+/* ---------------------------------------------------------------
+   DATA
+   Each board is a "say what you see" rebus drawn as inline SVG,
+   so there are no film stills to source.
+---------------------------------------------------------------- */
+const BOARDS = [
+  {
+    answers: ["The Breakfast Club"],
+    rebus: "Breakfast + club",
+    svg: `<svg viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Hidden picture">
+      <rect width="400" height="400" fill="#BFE1EE"/>
+      <rect y="300" width="400" height="100" fill="#E9B872"/>
+      <circle cx="128" cy="205" r="104" fill="#F8F1DD" stroke="#C9BFA2" stroke-width="5"/>
+      <circle cx="128" cy="205" r="76" fill="none" stroke="#E4DAC0" stroke-width="3"/>
+      <path d="M70 175c-8-32 28-52 52-36 22-18 60 0 50 30 20 22 0 56-30 48-16 22-54 14-58-10-26-2-34-24-14-32z" fill="#fff" stroke="#E8E2D0" stroke-width="3"/>
+      <circle cx="118" cy="180" r="24" fill="#F2B632"/>
+      <circle cx="110" cy="172" r="6" fill="#FBD56B"/>
+      <path d="M62 246q18-14 36 0t36 0 36 0 30 0" fill="none" stroke="#9C2F23" stroke-width="16" stroke-linecap="round"/>
+      <path d="M62 246q18-14 36 0t36 0 36 0 30 0" fill="none" stroke="#F0B9A0" stroke-width="4" stroke-linecap="round"/>
+      <path d="M72 274q16-12 32 0t32 0 32 0 22 0" fill="none" stroke="#9C2F23" stroke-width="14" stroke-linecap="round"/>
+      <path d="M72 274q16-12 32 0t32 0 32 0 22 0" fill="none" stroke="#F0B9A0" stroke-width="4" stroke-linecap="round"/>
+      <g fill="#1B1B20">
+        <circle cx="314" cy="148" r="38"/>
+        <circle cx="278" cy="208" r="38"/>
+        <circle cx="350" cy="208" r="38"/>
+        <polygon points="314,190 292,286 336,286"/>
+      </g>
+    </svg>`
+  },
+  {
+    answers: ["Die Hard"],
+    rebus: "Die + hard hat",
+    svg: `<svg viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Hidden picture">
+      <rect width="400" height="400" fill="#F0A25A"/>
+      <rect y="290" width="400" height="110" fill="#8C8F98"/>
+      <rect x="0" y="290" width="400" height="10" fill="#6F727B"/>
+      <rect x="34" y="128" width="156" height="156" rx="26" fill="#fff" stroke="#1B1B20" stroke-width="6"/>
+      <g fill="#1B1B20">
+        <circle cx="74" cy="168" r="14"/><circle cx="150" cy="168" r="14"/>
+        <circle cx="112" cy="206" r="14"/>
+        <circle cx="74" cy="244" r="14"/><circle cx="150" cy="244" r="14"/>
+      </g>
+      <path d="M222 262a78 78 0 0 1 156 0z" fill="#F2CB3C" stroke="#1B1B20" stroke-width="6" stroke-linejoin="round"/>
+      <rect x="290" y="180" width="20" height="82" fill="#D9A916" stroke="#1B1B20" stroke-width="4"/>
+      <rect x="204" y="258" width="192" height="24" rx="12" fill="#F2CB3C" stroke="#1B1B20" stroke-width="6"/>
+      <path d="M246 236a56 56 0 0 1 20-38" fill="none" stroke="#FBE79A" stroke-width="7" stroke-linecap="round"/>
+    </svg>`
+  },
+  {
+    answers: ["Beetlejuice", "Beetle Juice"],
+    rebus: "Beetle + juice",
+    svg: `<svg viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Hidden picture">
+      <rect width="400" height="400" fill="#CDE7B0"/>
+      <rect y="310" width="400" height="90" fill="#9CC27A"/>
+      <g stroke="#1B1B20" stroke-width="7" stroke-linecap="round" fill="none">
+        <path d="M76 170l-44-24M64 214H18M76 258l-44 28"/>
+        <path d="M176 170l44-24M188 214h46M176 258l44 28"/>
+        <path d="M112 100l-20-34M140 100l20-34"/>
+      </g>
+      <circle cx="126" cy="122" r="30" fill="#1B1B20"/>
+      <ellipse cx="126" cy="218" rx="64" ry="84" fill="#25563F" stroke="#1B1B20" stroke-width="6"/>
+      <path d="M126 138v162" stroke="#1B1B20" stroke-width="5"/>
+      <path d="M92 176a40 60 0 0 0-6 60" fill="none" stroke="#5FA27F" stroke-width="7" stroke-linecap="round"/>
+      <polygon points="258,120 366,120 350,306 274,306" fill="#EAF6FB" stroke="#1B1B20" stroke-width="6" stroke-linejoin="round"/>
+      <polygon points="263,166 361,166 349,302 275,302" fill="#F59A23"/>
+      <path d="M330 60l-26 230" stroke="#D23A2C" stroke-width="9" stroke-linecap="round"/>
+      <circle cx="366" cy="120" r="30" fill="#F59A23" stroke="#1B1B20" stroke-width="5"/>
+      <circle cx="366" cy="120" r="19" fill="#FBC670"/>
+      <path d="M366 101v38M347 120h38M353 107l26 26M379 107l-26 26" stroke="#F59A23" stroke-width="3"/>
+    </svg>`
+  }
+];
+
+/* Questions: first answer is the correct one; options get shuffled on screen.
+   None of them touch the hidden films. */
+const QUESTIONS = {
+  easy: [
+    ["Which 1985 film sends a DeLorean back in time?", ["Back to the Future", "Short Circuit", "Flight of the Navigator", "Weird Science"]],
+    ["Who played Ferris Bueller?", ["Matthew Broderick", "John Cusack", "Michael J. Fox", "Rob Lowe"]],
+    ["What sweets does Elliott use to lure E.T.?", ["Reese's Pieces", "M&M's", "Skittles", "Smarties"]],
+    ["\u201cWho you gonna call?\u201d", ["Ghostbusters", "The A-Team", "Police Academy", "Dragnet"]],
+    ["\u201cNobody puts Baby in a corner\u201d is from which film?", ["Dirty Dancing", "Footloose", "Flashdance", "Pretty in Pink"]],
+    ["Harrison Ford's whip-cracking archaeologist is called what?", ["Indiana Jones", "Jack Colton", "Rick Deckard", "Allan Quatermain"]],
+    ["Who trains Daniel in The Karate Kid?", ["Mr Miyagi", "Mr Han", "Sensei Kreese", "Master Splinter"]],
+    ["Which 1984 film warns you never to feed them after midnight?", ["Gremlins", "Critters", "Ghoulies", "Labyrinth"]],
+    ["Who played the Terminator?", ["Arnold Schwarzenegger", "Sylvester Stallone", "Dolph Lundgren", "Jean-Claude Van Damme"]],
+    ["Who played Maverick in Top Gun?", ["Tom Cruise", "Val Kilmer", "Kevin Bacon", "Patrick Swayze"]]
+  ],
+  medium: [
+    ["Who sang the title song for Footloose?", ["Kenny Loggins", "Huey Lewis", "Bryan Adams", "Rick Springfield"]],
+    ["What is the military supercomputer called in WarGames?", ["WOPR", "HAL 9000", "Skynet", "Master Control"]],
+    ["Whose treasure are The Goonies hunting for?", ["One-Eyed Willy", "Blackbeard", "Captain Flint", "Long John Silver"]],
+    ["Who directed The Lost Boys?", ["Joel Schumacher", "Tim Burton", "John Hughes", "Richard Donner"]],
+    ["Who performed \u201cThe Power of Love\u201d for Back to the Future?", ["Huey Lewis and the News", "Survivor", "Starship", "REO Speedwagon"]],
+    ["Who played Jareth the Goblin King in Labyrinth?", ["David Bowie", "Sting", "Adam Ant", "Tim Curry"]],
+    ["What is the high school in Grease called?", ["Rydell High", "Shermer High", "Hill Valley High", "Ridgemont High"]],
+    ["Who played Marty McFly's mum, Lorraine?", ["Lea Thompson", "Elisabeth Shue", "Molly Ringwald", "Ally Sheedy"]],
+    ["What is Sigourney Weaver's character called in Ghostbusters?", ["Dana Barrett", "Janine Melnitz", "Ellen Ripley", "Tess McGill"]],
+    ["Who performed \u201cTake My Breath Away\u201d for Top Gun?", ["Berlin", "Heart", "Roxette", "T'Pau"]],
+    ["RoboCop patrols which city?", ["Detroit", "Chicago", "Los Angeles", "New York"]],
+    ["Which band did the songs for Highlander?", ["Queen", "Genesis", "Toto", "Dire Straits"]]
+  ],
+  hard: [
+    ["What is the shopping mall called at the start of Back to the Future?", ["Twin Pines Mall", "Hill Valley Galleria", "Clock Tower Plaza", "Lyon Estates Mall"]],
+    ["In Aliens, the colony is on which moon?", ["LV-426", "KG-348", "PX-117", "Ceti Alpha V"]],
+    ["Who composed the score for Blade Runner?", ["Vangelis", "John Carpenter", "Tangerine Dream", "Giorgio Moroder"]],
+    ["In The Princess Bride, how many fingers does Count Rugen have on his right hand?", ["Six", "Four", "Seven", "Three"]],
+    ["Which car does Cameron's dad keep in the garage in Ferris Bueller's Day Off?", ["Ferrari 250 GT California", "Porsche 356 Speedster", "Jaguar E-Type", "Corvette Stingray"]],
+    ["In the film of The Shining, which room is Danny told to stay out of?", ["237", "217", "1408", "101"]],
+    ["Who played Dillon in Predator?", ["Carl Weathers", "Bill Duke", "Jesse Ventura", "Keith David"]],
+    ["What is Jack Burton's truck called in Big Trouble in Little China?", ["The Pork-Chop Express", "The Rubber Duck", "The Bandit", "The Iron Horse"]],
+    ["Who directed Gremlins?", ["Joe Dante", "Steven Spielberg", "Chris Columbus", "Robert Zemeckis"]],
+    ["Stand By Me is based on which Stephen King novella?", ["The Body", "The Mist", "Apt Pupil", "The Long Walk"]]
+  ]
+};
+
+/* Corners are easy, edges medium, the juicy middle is hard. */
+const TIER_BY_TILE = [
+  "easy","medium","medium","easy",
+  "medium","hard","hard","medium",
+  "medium","hard","hard","medium",
+  "easy","medium","medium","easy"
+];
+const TURNS_PER_BOARD = 10;
+
+/* ---------------------------------------------------------------
+   STATE
+   Deliberately shaped like the record a server would hold later:
+   everything the UI shows is derived from this one object.
+---------------------------------------------------------------- */
+const state = {
+  boardIndex: 0,
+  tilesOpen: [],        // indexes 0..15
+  turnsLeft: TURNS_PER_BOARD,
+  score: 0,
+  phase: "pick",        // pick | question | answered | last | done | finished
+  activeTile: null,
+  question: null,       // { text, options, correct, picked }
+  lastStatic: null,
+  log: []               // move history, handy once there are two players
+};
+const decks = { easy: [], medium: [], hard: [] };
+
+/* ---------------------------------------------------------------
+   HELPERS
+---------------------------------------------------------------- */
+const $ = id => document.getElementById(id);
+function shuffle(a) {
+  a = a.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+function drawQuestion(tier) {
+  if (!decks[tier].length) decks[tier] = shuffle(QUESTIONS[tier]);
+  const [text, answers] = decks[tier].pop();
+  return { text, correct: answers[0], options: shuffle(answers), picked: null };
+}
+function norm(s) {
+  return s.toLowerCase().replace(/[^a-z0-9 ]/g, "").replace(/^\s*the\s+/, "").replace(/\s+/g, "");
+}
+function editDistance(a, b) {
+  const d = Array.from({ length: a.length + 1 }, (_, i) => [i]);
+  for (let j = 1; j <= b.length; j++) d[0][j] = j;
+  for (let i = 1; i <= a.length; i++)
+    for (let j = 1; j <= b.length; j++)
+      d[i][j] = Math.min(d[i-1][j] + 1, d[i][j-1] + 1, d[i-1][j-1] + (a[i-1] === b[j-1] ? 0 : 1));
+  return d[a.length][b.length];
+}
+function isRightFilm(guess) {
+  const g = norm(guess);
+  if (!g) return false;
+  return BOARDS[state.boardIndex].answers.some(ans => {
+    const a = norm(ans);
+    return editDistance(g, a) <= (a.length > 6 ? 2 : 1);   // forgive typos
+  });
+}
+const closedCount = () => 16 - state.tilesOpen.length;
+
+/* ---------------------------------------------------------------
+   MOVES
+---------------------------------------------------------------- */
+function pickTile(i) {
+  if (state.phase !== "pick" || state.tilesOpen.includes(i)) return;
+  state.activeTile = i;
+  state.question = drawQuestion(TIER_BY_TILE[i]);
+  state.phase = "question";
+  render();
+}
+function answer(option) {
+  if (state.phase !== "question") return;
+  const q = state.question;
+  q.picked = option;
+  const right = option === q.correct;
+  state.turnsLeft--;
+  state.lastStatic = null;
+  if (right) state.tilesOpen.push(state.activeTile);
+  else state.lastStatic = state.activeTile;
+  state.log.push({ type: "question", tile: state.activeTile, right });
+  state.phase = "answered";
+  render();
+}
+function carryOn() {
+  state.activeTile = null;
+  state.question = null;
+  state.lastStatic = null;
+  state.phase = state.turnsLeft > 0 ? "pick" : "last";
+  render();
+}
+function guessFilm(text) {
+  if (!["pick", "answered", "last"].includes(state.phase)) return;
+  if (!text.trim()) return;
+  const right = isRightFilm(text);
+  state.log.push({ type: "guess", text, right });
+  if (right) {
+    state.won = closedCount();
+    state.score += state.won;
+    endBoard(true);
+    return;
+  }
+  state.lastGuess = text;
+  if (state.phase === "last" || state.turnsLeft <= 1) {
+    state.turnsLeft = 0;
+    endBoard(false);
+  } else {
+    state.turnsLeft--;
+    state.activeTile = null; state.question = null; state.lastStatic = null;
+    state.phase = "pick";
+    state.guessMiss = true;
+    render();
+  }
+}
+function endBoard(won) {
+  state.result = won;
+  state.phase = "done";
+  render();
+}
+function nextBoard() {
+  if (state.boardIndex + 1 >= BOARDS.length) { state.phase = "finished"; render(); return; }
+  state.boardIndex++;
+  resetBoard();
+}
+function resetBoard() {
+  Object.assign(state, {
+    tilesOpen: [], turnsLeft: TURNS_PER_BOARD, phase: "pick",
+    activeTile: null, question: null, lastStatic: null,
+    result: null, won: 0, lastGuess: "", guessMiss: false
+  });
+  buildBoard();
+  render();
+}
+function playAgain() {
+  state.boardIndex = 0; state.score = 0; state.log = [];
+  resetBoard();
+}
+
+/* ---------------------------------------------------------------
+   RENDER
+---------------------------------------------------------------- */
+function buildBoard() {
+  $("picture").innerHTML = BOARDS[state.boardIndex].svg;
+  const tiles = $("tiles");
+  tiles.innerHTML = "";
+  TIER_BY_TILE.forEach((tier, i) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "tile " + tier;
+    b.dataset.i = i;
+    b.innerHTML = `<span class="label"><span>${tier[0].toUpperCase() + tier.slice(1)}</span><b></b></span>`;
+    b.addEventListener("click", () => pickTile(i));
+    tiles.appendChild(b);
+  });
+}
+
+function render() {
+  $("score").textContent = state.score;
+  $("boardNo").textContent = state.boardIndex + 1;
+  $("boardTotal").textContent = BOARDS.length;
+  $("turnsText").textContent = state.turnsLeft === 1 ? "1 turn left" : state.turnsLeft + " turns left";
+  $("pips").innerHTML = Array.from({ length: TURNS_PER_BOARD },
+    (_, i) => `<i class="${i < state.turnsLeft ? "" : "spent"}"></i>`).join("");
+
+  const over = state.phase === "done" || state.phase === "finished";
+  document.querySelectorAll(".tile").forEach(b => {
+    const i = +b.dataset.i;
+    const open = over || state.tilesOpen.includes(i);
+    b.classList.toggle("open", open);
+    b.classList.toggle("active", state.activeTile === i && !open);
+    b.classList.toggle("static", state.lastStatic === i);
+    b.disabled = open || state.phase !== "pick";
+    const row = Math.floor(i / 4) + 1, col = i % 4 + 1;
+    b.setAttribute("aria-label", `Row ${row}, column ${col}, ${TIER_BY_TILE[i]} question, ${open ? "open" : "closed"}`);
+  });
+
+  const canGuess = ["pick", "answered", "last"].includes(state.phase);
+  $("guessForm").hidden = !canGuess;
+  $("guessNote").hidden = !canGuess;
+  $("guessNote").textContent = state.phase === "last"
+    ? "Out of turns. One last guess, or give up."
+    : `Right now a correct guess is worth ${closedCount()} points. A wrong one costs a turn.`;
+
+  const c = $("counter");
+  c.innerHTML = "";
+  const add = (tag, cls, text) => {
+    const el = document.createElement(tag);
+    if (cls) el.className = cls;
+    if (text != null) el.textContent = text;
+    c.appendChild(el);
+    return el;
+  };
+  const button = (label, fn, quiet) => {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "btn" + (quiet ? " quiet" : "");
+    b.textContent = label; b.addEventListener("click", fn);
+    return b;
+  };
+
+  if (state.phase === "pick") {
+    if (state.guessMiss) {
+      add("p", "verdict bad", `Not \u201c${state.lastGuess}\u201d. That cost you a turn.`);
+      state.guessMiss = false;
+    }
+    add("h2", "", state.tilesOpen.length ? "Pick another tape to open" : "Pick a tape to open");
+    add("p", "", "Corners ask easy questions and show you the least. The middle four are hard.");
+  }
+
+  if (state.phase === "question" || state.phase === "answered") {
+    const q = state.question;
+    const tier = TIER_BY_TILE[state.activeTile];
+    add("div", "tier", tier[0].toUpperCase() + tier.slice(1) + " question");
+    add("h2", "", q.text);
+    const list = add("div", "options");
+    q.options.forEach(opt => {
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "opt"; b.textContent = opt;
+      if (state.phase === "answered") {
+        b.disabled = true;
+        if (opt === q.correct) b.classList.add("right");
+        else if (opt === q.picked) b.classList.add("wrong");
+      } else {
+        b.addEventListener("click", () => answer(opt));
+      }
+      list.appendChild(b);
+    });
+    if (state.phase === "answered") {
+      const right = q.picked === q.correct;
+      const row = add("div", "row");
+      const v = document.createElement("span");
+      v.className = "verdict " + (right ? "good" : "bad");
+      v.style.alignSelf = "center";
+      v.textContent = right ? "Tape opened." : "Tracking error. The tape stays shut.";
+      row.appendChild(v);
+      row.appendChild(button(state.turnsLeft > 0 ? "Carry on" : "Last chance", carryOn));
+    }
+  }
+
+  if (state.phase === "last") {
+    add("h2", "", "No turns left");
+    add("p", "", "Have one final go at naming the film above, or see the answer.");
+    add("div", "row").appendChild(button("Give up and show me", () => endBoard(false), true));
+  }
+
+  if (state.phase === "done") {
+    const b = BOARDS[state.boardIndex];
+    if (state.result) {
+      add("p", "verdict good", `Correct, with ${state.won} tapes still shut. ${state.won} points.`);
+    } else {
+      add("p", "verdict bad", state.lastGuess ? `Not \u201c${state.lastGuess}\u201d. No points this board.` : "No points this board.");
+    }
+    add("h2", "", b.answers[0]);
+    add("p", "", b.rebus + ".");
+    const last = state.boardIndex + 1 >= BOARDS.length;
+    add("div", "row").appendChild(button(last ? "See final score" : "Open the next board", nextBoard));
+  }
+
+  if (state.phase === "finished") {
+    add("h2", "", `Final score: ${state.score} of ${BOARDS.length * 16}`);
+    add("p", "", state.score >= 30 ? "Membership upgraded to gold." :
+                 state.score >= 15 ? "Respectable. No late fees today." :
+                                     "That'll be \u00a32.50 in late fees, please.");
+    add("div", "row").appendChild(button("Play again", playAgain));
+  }
+}
+
+$("guessForm").addEventListener("submit", e => {
+  e.preventDefault();
+  const input = $("guessInput");
+  const text = input.value;
+  input.value = "";
+  guessFilm(text);
+});
+
+buildBoard();
+render();
+</script>
+</body>
+</html>
